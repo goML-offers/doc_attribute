@@ -91,7 +91,7 @@ def define_prompt(formatted_prompt):
         if len(lines) >= 2:
             attribute_value = lines[0].split(':',1)[1].strip()
             confidence_value = lines[1].split(':')[1].strip()
-            answers.append({attribute: attribute_value, "confidence": float(confidence_value)})
+            answers.append({"attribute": attribute,"value":attribute_value, "confidence": float(confidence_value)})
         else:
             answers.append({attribute: "N/A", "confidence": 0.0})  # Handle cases where lines are not present
         # answers.append({"attribute":attribute})
