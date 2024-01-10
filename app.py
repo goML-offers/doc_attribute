@@ -168,7 +168,7 @@ with col2:
 
 uploaded_file = st.file_uploader("Choose a pdf file", on_change=uploader_callback, type="pdf", key="file_uploader")
 
-@st.cache_data
+
 def browse_file():
     if uploaded_file is not None:
         temp_pdf = tempfile.NamedTemporaryFile(delete=False)
@@ -191,9 +191,9 @@ def browse_file():
 st.subheader("MetaData")
 formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
 
-if uploaded_file is not None:
+# if uploaded_file is not None:
 
-    browse_file()
+#     browse_file()
 
 
 with st.spinner("Processing..."):
