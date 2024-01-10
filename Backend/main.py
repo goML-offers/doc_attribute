@@ -80,7 +80,7 @@ def define_prompt(formatted_prompt):
 
 
     for attribute in attributes:
-        question=f"Provide me the {attribute}. Do not add extra wordings.Check it iteratively and respond precisely. Add the confidence scale from scale 0 to 1.Provide me in two line For example: policy period :'20 Apr 23 00:00 hrs to 19 Apr 25 23:59 hrs'. \n Confidence level: '0.9'"
+        question=f"Provide me the {attribute}. Do not add extra wordings.Check it iteratively and respond precisely. Add the confidence scale from scale 0 to 1.Provide me in two line For example: policy period :20 Apr 23 00:00 hrs to 19 Apr 25 23:59 hrs. \n Confidence level:0.9 . colon to show the value is important "
         search = docsearch.similarity_search(attribute)
         response = chain.run(input_documents=search, question=question)
         print("============")
