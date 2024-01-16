@@ -26,10 +26,11 @@ buffer = io.BytesIO()
 
 load_dotenv()
 
-PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME')  # 'kn1'
+PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME') 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
+
 
 
 if "edited_df" not in st.session_state:
@@ -69,7 +70,7 @@ def vectorize_and_store_documents(pdf_filename):
     texts = text_splitter.split_documents(pages)
     print(texts)
 
-     # Vectorize documents using OpenAI embeddings
+
     embeddings = OpenAIEmbeddings(client='')
     docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=PINECONE_INDEX_NAME)
     print(docsearch)
