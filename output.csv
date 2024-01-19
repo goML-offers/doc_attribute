@@ -1,0 +1,3 @@
+Order Date,Order Number,Customer Number,Customer PO Number,Salesperson,Ship Via,Ship Date,Order Qty
+03/29/2023,5175176,0051427,0051427,Eric Thompson,RETURN GOODS,06/08/2023,"{'Description': '-2ea S-A LGB3K015B 15A 3P 65KA 480V', 'Unit Price': '163.064/ea', 'Ext Price': '-326.13'}"
+03/29/2023,5175176,0051427,0051427,Eric Thompson,RETURN GOODS,06/08/2023,"{'Description': '-1ea S-A LGB3K030B 30A 3P 65KA 480V', 'Unit Price': '163.064/ea', 'Ext Price': '-163.06'}"

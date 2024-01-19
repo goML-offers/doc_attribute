@@ -100,15 +100,17 @@ def encode_image(image_path):
 
 def vision_bot(pdf_file_name):
     results=[]
+    print("1v")
     image_paths=[f'output_images/{pdf_file_name}1.png']
     # Iterate through each image path
+    print("2v")
     for image_path in image_paths:
         # Getting the base64 string
 
         print(image_path)
-
+        print("3v")
         base64_image = encode_image(image_path)
-
+        print("4v")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {OPENAI_API_KEY}"
@@ -141,14 +143,19 @@ def vision_bot(pdf_file_name):
             ],
         "max_tokens":2000
         }
-
+        print("5v")
         # Make the API request
         temp =[]
         response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        print("6v")
         temp.append(response.json())
+        print("7v")
         result = temp[0]
+        print("8v")
         message = result["choices"][0]["message"]["content"]
+        print("9v")
         results.append(message)
+        print("10v")
         return results
 
 
@@ -439,7 +446,7 @@ uploaded_file_pdf_2 = st.file_uploader("Choose a PDF file", type="pdf", key="pdf
 with st.spinner("Processing..."):
     if st.button("Execute"):
         if uploaded_file_pdf and uploaded_file_excel:
-
+            vision_out=""
             a=uploaded_file_pdf
             output_folder = "output_images"
             for b in a:
@@ -459,28 +466,33 @@ with st.spinner("Processing..."):
             # vision_out=vision_bot(pdf_file_name)
             # print(vision_out)
         try:
-            
+            print("1")
             
             result_json = browse_pdf_files(vision_out,uploaded_file_pdf_2, uploaded_file_excel)
+            print("2")
             # st.write(result_json)
             # match = re.search(r'{(.*?)}', result_json, re.DOTALL)
 
             # extracted_json_string = match.group(1)
             json_string=result_json[0]
+            print("3")
             json_string = json_string.replace('```json\n', '').replace('```', '').replace('\n', '')
+            print("4")
             json_string=json_string.strip()
             print(json_string)
+            print("5")
             result_dict = json.loads(json_string)
             
-
+            print("6")
             # Create a DataFrame from the flattened dictionary
-            df = pd.DataFrame(result_dict)
+            df = pd.DataFrame([result_dict])
             # df = pd.DataFrame([result_json])
-
+            print("7")
             st.write(df)
             # Save DataFrame to Excel file
             csv_filename = 'output.csv'
             absolute_path = os.path.abspath(csv_filename)
+            print("8")
             df.to_csv(absolute_path, index=False)
             # result_df = browse_pdf_files(vision_out,uploaded_file_pdf, uploaded_file_excel)
             # print(result_df)
@@ -492,13 +504,16 @@ with st.spinner("Processing..."):
 
             #     buffer.seek(0)
             # os.rmdir("output_images")
+            print("9")
             shutil.rmtree("output_images")
+            print("10")
             st.download_button(
             label="Download CSV file",
             data=open(absolute_path, 'rb').read(),
             file_name="output.csv",
             mime="text/csv"
         )
+            print("11")
 
 
         except Exception as e:
