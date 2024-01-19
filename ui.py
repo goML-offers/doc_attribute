@@ -24,6 +24,7 @@ import xlsxwriter
 from io import BytesIO 
 import fitz 
 from PIL import Image
+import shutil
 
 
 buffer = io.BytesIO()
@@ -97,9 +98,9 @@ def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
-def vision_bot():
+def vision_bot(pdf_file_name):
     results=[]
-    image_paths=['w2.jpg']
+    image_paths=[f'output_images/{pdf_file_name}1.png']
     # Iterate through each image path
     for image_path in image_paths:
         # Getting the base64 string
@@ -123,7 +124,10 @@ def vision_bot():
                             "type": "text",
                             "text": """perform a deep OCR try to interpret all feilds and values you see in this form.  you only job is to provide absolutely accurate 
                             information, so do a detail and accurate ocr, and all the fields I have given are present in the document image, if you're not able to find, 
-                            again do an ocr, but you must give accurate and all fields."""
+                            again do an ocr, but you must give accurate and all fields. you are provided with full rights to extract the details in the document.
+                            If you are not able to run a dep ocr just bring out only few details from the document.Just provide the output file as json file for example 
+                            {  "Customer Number": "8417",  "Customer PO Number": "0051566",  "Salesperson": "Eric Thompson",  "Ship Via": "OT OUR TRUCK",  "Ship Date": "09/06/2023",  "Order Qty": "1ea",  "Ship Qty": "1ea",  "Description": "S-A B330H 30A 3P 240V 22KA",  "Payments Amount Due": "NA"}"""
+                            
                         },
                         {
                             "type": "image_url",
@@ -150,7 +154,7 @@ def vision_bot():
 
 def vanilla_openai(results_json,formatted_prompt):
     results=[]
-    query=f"Your task is to act as an expert data extractor You will be given documents containing various data points. Extract the following fields and present them in a JSON format:{formatted_prompt} For each field, ensure accuracy and completeness. If a field is not present or its value is unclear, indicate this with 'NA'.Conduct thorough checks to ensure the accuracy of the data extracted. Your main objective is to provide clear, accurate, and well-structured data in JSON format."
+    query=f"Your task is to act as an expert data extractor You will be given documents containing various data points. Extract the following fields and present them in a JSON format:{formatted_prompt} For each field, ensure accuracy and completeness. If a field is not present or its value is unclear, indicate this with 'NA'.Conduct thorough checks to ensure the accuracy of the data extracted. Your main objective is to provide clear, accurate, and well-structured data in JSON format.Dont return any wordings before or after the json output. Your job is to return only the json file"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {OPENAI_API_KEY}"
@@ -184,6 +188,9 @@ def vanilla_openai(results_json,formatted_prompt):
     print(results)
     print("===========================================================================")
     return results
+
+
+
 def define_prompt(formatted_prompt):
     llm_chat = ChatOpenAI(temperature=0.6, max_tokens=50, model='gpt-4', client='')
     embeddings = OpenAIEmbeddings(client='')
@@ -359,7 +366,7 @@ def browse_pdf_files(vision_out,pdf_files, excel_file):
     return final_result
 
 
-def pdf_to_images(pdf_file, output_folder):
+def pdf_to_images(pdf_file, output_folder,pdf_file_name):
     # Create the output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
 
@@ -381,7 +388,7 @@ def pdf_to_images(pdf_file, output_folder):
         image = Image.frombytes("RGB", [pixmap.width, pixmap.height], img_bytes)
 
         # Save the image to the output folder
-        image_path = os.path.join(output_folder, f"page_{page_number + 1}.png")
+        image_path = os.path.join(output_folder, f"{pdf_file_name}{page_number + 1}.png")
         image.save(image_path, "PNG")
 
     # Close the PDF file
@@ -428,22 +435,33 @@ uploaded_file_excel = st.file_uploader("Choose an Excel file", type=["xlsx", "xl
 
 st.subheader("MetaData")
 
-
+uploaded_file_pdf_2 = st.file_uploader("Choose a PDF file", type="pdf", key="pdf_file_uploader_2", accept_multiple_files=True)
 with st.spinner("Processing..."):
     if st.button("Execute"):
         if uploaded_file_pdf and uploaded_file_excel:
+
+            a=uploaded_file_pdf
+            output_folder = "output_images"
+            for b in a:
+                pdf_file_name =b.name
+                temp_pdf_file = BytesIO(b.read())
+                temp_pdf_file.seek(0)
+                if temp_pdf_file.readable() and temp_pdf_file.read(1):
+                    temp_pdf_file.seek(0)  # Reset file pointer to the beginning
+                    pdf_to_images(temp_pdf_file, output_folder, pdf_file_name)
+                    vision_out = vision_bot(pdf_file_name)
+                    print(vision_out)
+                else:
+                    print(f"Skipping empty PDF file: {pdf_file_name}")
+                        # pdf_to_images(temp_pdf_file, output_folder,pdf_file_name)
+
+
+            # vision_out=vision_bot(pdf_file_name)
+            # print(vision_out)
+        try:
             
-            # output_folder = "output_images"
-            # for uploaded_files_pdf in uploaded_file_pdf:
-            #     temp_pdf_file = BytesIO(uploaded_files_pdf.read())
-            #     temp_pdf_file.seek(0)
-            #     pdf_to_images(temp_pdf_file, output_folder)
-
-
-            vision_out=vision_bot()
-            print(vision_out)
-
-            result_json = browse_pdf_files(vision_out,uploaded_file_pdf, uploaded_file_excel)
+            
+            result_json = browse_pdf_files(vision_out,uploaded_file_pdf_2, uploaded_file_excel)
             # st.write(result_json)
             # match = re.search(r'{(.*?)}', result_json, re.DOTALL)
 
@@ -451,16 +469,19 @@ with st.spinner("Processing..."):
             json_string=result_json[0]
             json_string = json_string.replace('```json\n', '').replace('```', '').replace('\n', '')
             json_string=json_string.strip()
+            print(json_string)
             result_dict = json.loads(json_string)
             
 
             # Create a DataFrame from the flattened dictionary
-            df = pd.DataFrame(result_dict, index=[0])
+            df = pd.DataFrame(result_dict)
             # df = pd.DataFrame([result_json])
 
+            st.write(df)
             # Save DataFrame to Excel file
             csv_filename = 'output.csv'
-            df.to_csv(csv_filename, index=False)
+            absolute_path = os.path.abspath(csv_filename)
+            df.to_csv(absolute_path, index=False)
             # result_df = browse_pdf_files(vision_out,uploaded_file_pdf, uploaded_file_excel)
             # print(result_df)
             # if result_df is not None:
@@ -470,10 +491,16 @@ with st.spinner("Processing..."):
             #     result_df.to_excel(buffer, index=False, engine='openpyxl')
 
             #     buffer.seek(0)
-
-        st.download_button(
+            # os.rmdir("output_images")
+            shutil.rmtree("output_images")
+            st.download_button(
             label="Download CSV file",
-            data=open(csv_filename, 'rb').read(),
+            data=open(absolute_path, 'rb').read(),
             file_name="output.csv",
             mime="text/csv"
         )
+
+
+        except Exception as e:
+            print(f"Error processing PDF files: {e}")
+       
