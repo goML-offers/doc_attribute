@@ -570,4 +570,5 @@ with st.spinner("Processing..."):
 
         except Exception as e:
             print(f"Error processing PDF files: {e}")
+            st.subheader("I faced an issue fetching the data. This could be due to an error in the uploaded file, requested fields of my ML model not responding. Please try again!")
        
