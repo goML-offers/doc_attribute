@@ -15,3 +15,8 @@ openai==0.28.1
 pypdf
 tiktoken
 openpyxl
+pytesseract
+cv2
+keras
+tensorflow
+matplotlib

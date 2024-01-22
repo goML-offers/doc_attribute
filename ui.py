@@ -25,6 +25,13 @@ from io import BytesIO
 import fitz 
 from PIL import Image
 import shutil
+import easyocr
+import cv2
+import numpy as np
+import pytesseract
+import argparse
+import keras_ocr
+import matplotlib.pyplot as plt
 
 
 buffer = io.BytesIO()
@@ -55,7 +62,7 @@ if 'file_uploader_excel' not in st.session_state:
     st.session_state.file_uploader_excel = None
 
 
-def vectorize_and_store_documents(pdf_filename,vision_out):
+def vectorize_and_store_documents(pdf_filename,vision_out,test_extract_output):
     # pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
     # print('Checking if index exists...')
     
@@ -81,7 +88,7 @@ def vectorize_and_store_documents(pdf_filename,vision_out):
         chunk_size=1000, chunk_overlap=100)
     texts_from_pdf = text_splitter.split_documents(pages)
 
-    texts = [t.page_content for t in texts_from_pdf] + vision_out
+    texts = [t.page_content for t in texts_from_pdf] + vision_out+ list(test_extract_output)
 
     # texts2=text_splitter.split_documents(vision_out)
     # texts+=texts2
@@ -98,6 +105,37 @@ def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
+
+def extract_text_easy_ocr(data):
+    extracted_text = []
+    for entry in data:
+        text = entry[1]  # Extracting the text from the tuple
+        extracted_text.append(text)
+    return extracted_text
+
+def tessract(pdf_file_name):
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    # img = cv2.imread(f'output_images/{pdf_file_name}1.png')
+    image = cv2.imread(f'output_images/{pdf_file_name}1.png')
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    text = pytesseract.image_to_string(image)
+    print(text)
+    return text 
+
+# def keras_ocr_extract(pdf_file_name):
+#     pipeline = keras_ocr.pipeline.Pipeline()
+#     image_path = f'output_images/{pdf_file_name}1.png'
+#     image = keras_ocr.tools.read(image_path)
+#     prediction_group = pipeline.recognize([image])[0]
+
+#     fig, ax = plt.subplots(figsize=(10, 20))
+#     keras_ocr.tools.drawAnnotations(image=image, predictions=prediction_group, ax=ax)
+#     text_list = []
+#     for text, box in prediction_group:
+#         print("........keras.........", text)
+#         text_list.append(text)
+#     print(".................final",text_list)
+#     return text_list
 def vision_bot(pdf_file_name):
     results=[]
     print("1v")
@@ -159,7 +197,7 @@ def vision_bot(pdf_file_name):
         return results
 
 
-def vanilla_openai(results_json,formatted_prompt):
+def vanilla_openai(results_json,formatted_prompt,output,tessract):
     results=[]
     query=f"Your task is to act as an expert data extractor You will be given documents containing various data points. Extract the following fields and present them in a JSON format:{formatted_prompt} For each field, ensure accuracy and completeness. If a field is not present or its value is unclear, indicate this with 'NA'.Conduct thorough checks to ensure the accuracy of the data extracted. Your main objective is to provide clear, accurate, and well-structured data in JSON format.Dont return any wordings before or after the json output. Your job is to return only the json file"
     headers = {
@@ -175,7 +213,7 @@ def vanilla_openai(results_json,formatted_prompt):
                 "content": [
                     {
                         "type": "text",
-                        "text":f"{results_json},{query}",
+                        "text":f"{tessract},{output},{results_json},{query}",
                     },
                     
                 ]
@@ -252,19 +290,19 @@ def call_attributes_api(formatted_prompt):
         st.error(f"Error in attributes request: {attribute_error}")
         return False
 
-def save_to_json(dataframe, filename="output.json"):
-    with open(filename, 'w') as json_file:
-        json.dump(dataframe.to_json(orient='records'), json_file)
+# def save_to_json(dataframe, filename="output.json"):
+#     with open(filename, 'w') as json_file:
+#         json.dump(dataframe.to_json(orient='records'), json_file)
 
-def on_download_click(dataframe, filename):
-    save_to_json(dataframe, filename)
-    with open(filename, 'r') as file:
-        data = file.read()
-    b64 = base64.b64encode(data.encode()).decode()
-    href = f'<a href="data:file/json;base64,{b64}" download="{filename}">Click here to download the file</a>'
-    st.markdown(href, unsafe_allow_html=True)
-    time.sleep(5)
-    st.success("File downloaded successfully!")
+# def on_download_click(dataframe, filename):
+#     save_to_json(dataframe, filename)
+#     with open(filename, 'r') as file:
+#         data = file.read()
+#     b64 = base64.b64encode(data.encode()).decode()
+#     href = f'<a href="data:file/json;base64,{b64}" download="{filename}">Click here to download the file</a>'
+#     st.markdown(href, unsafe_allow_html=True)
+#     time.sleep(5)
+#     st.success("File downloaded successfully!")
 
 def uploader_callback():
     # Update session state keys
@@ -278,10 +316,13 @@ def uploader_callback():
         browse_excel_file(st.session_state.file_uploader_excel)
 
 def extract_text_from_pdf(pdf_path):
+    print("PDF Path:", pdf_path)
     with pdfplumber.open(pdf_path) as pdf:
         text = ""
         for page in pdf.pages:
             text += page.extract_text()
+
+    print("extract text from pdf ",text) 
     return text
 
 # def browse_pdf_files(pdf_files, excel_file):
@@ -339,11 +380,13 @@ def process_pdf(vision_out,pdf_file,excel_df,i):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
             temp_pdf.write(pdf_file.read())
             temp_pdf_path = temp_pdf.name
-        
+        test_extract_output = extract_text_from_pdf(temp_pdf_path)
         # Process the PDF and update the Excel DataFrame
         with open(temp_pdf_path, 'rb') as pdf_file:
-            results_json=vectorize_and_store_documents(pdf_file.name,vision_out)
+            results_json=vectorize_and_store_documents(pdf_file.name,vision_out,test_extract_output)
         
+        
+
         attributes_str = ",".join(map(str, excel_df.columns))
         formatted_prompt_input = attributes_str.strip()
         print("formateddddddddd",formatted_prompt_input)
@@ -363,13 +406,13 @@ def process_pdf(vision_out,pdf_file,excel_df,i):
     #     return excel_df
 
 
-def browse_pdf_files(vision_out,pdf_files, excel_file):
+def browse_pdf_files(vision_out,pdf_files, excel_file,output,tessract):
     result_df = pd.read_excel(excel_file, engine='openpyxl') if excel_file else pd.DataFrame()
     i=0
     for pdf_file in pdf_files:
         result_json,formatted_prompt = process_pdf(vision_out,pdf_file, result_df,i)
         i+=1
-    final_result=vanilla_openai(result_json,formatted_prompt)
+    final_result=vanilla_openai(result_json,formatted_prompt,output,tessract)
     return final_result
 
 
@@ -461,14 +504,23 @@ with st.spinner("Processing..."):
                 else:
                     print(f"Skipping empty PDF file: {pdf_file_name}")
                         # pdf_to_images(temp_pdf_file, output_folder,pdf_file_name)
-
-
+            image_file=f"output_images/{pdf_file_name}1.png"
+            reader = easyocr.Reader(['en'])
+            output = reader.readtext(image_file)
+            output = extract_text_easy_ocr(output)
+            print("output",output)
             # vision_out=vision_bot(pdf_file_name)
             # print(vision_out)
+            
+            tess_output=tessract(pdf_file_name)
+            print("tessssoutput",tess_output)
+
+            # keras_output=keras_ocr_extract(pdf_file_name)
+
         try:
             print("1")
-            
-            result_json = browse_pdf_files(vision_out,uploaded_file_pdf_2, uploaded_file_excel)
+
+            result_json = browse_pdf_files(vision_out,uploaded_file_pdf_2, uploaded_file_excel,output,tess_output)
             print("2")
             # st.write(result_json)
             # match = re.search(r'{(.*?)}', result_json, re.DOTALL)
