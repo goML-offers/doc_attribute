@@ -96,7 +96,81 @@ def create_workspace(id, workspace_name,user_id):
 
     return workspace_created,workspace_id,user_id
 
+def create_dynamic_table(table_name, columns, data):
+    connection_params = {
+        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
+        'port': '5432',
+        'database': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres'
+    }
 
+    connection = psycopg2.connect(**connection_params)
+    cursor = connection.cursor()
+    columns_lower = [col.lower().replace(' ', '_') for col in columns]
+    column_definitions = ", ".join([f'"{col}" VARCHAR' for col in columns_lower])
+    
+    create_table_query = f"CREATE TABLE IF NOT EXISTS genpact.{table_name} ({column_definitions});"
+    # create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(column_definitions)});"
+    cursor.execute(create_table_query)
+    values = "', '".join(str(row[col]) for col in columns_lower if col in row.index)
+    insert_query = f"INSERT INTO genpact.{table_name} ({', '.join(columns_lower)}) VALUES ('{values}');"
+    print(insert_query)
+    cursor.execute(insert_query)
+
+    connection.commit()
+    connection.close()
+
+
+def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list):
+    connection_params = {
+        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
+        'port': '5432',
+        'database': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres'
+    }
+
+    connection = psycopg2.connect(**connection_params)
+    cursor = connection.cursor()
+
+    print("User id inside get_workspace_history",user_id)
+    # Retrieve workspace history
+    metadata_convert=str(formatted_prompt_list)
+
+    metadata = json.dumps(metadata_convert)
+    print(metadata)
+    filename=filename.replace(' ','_')
+
+    query = "INSERT INTO genpact.workspace_history (workspace_name, filename, user_id, metadata) VALUES (%s, %s, %s, %s);"
+    data = (workspace_name, filename, user_id, metadata)
+    
+    print(query)
+    cursor.execute(query, data)
+    st.session_state.user_id = user_id
+
+    connection.commit()
+    connection.close()
+
+def get_metadata_values(user_id):
+    connection_params = {
+        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
+        'port': '5432',
+        'database': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres'
+    }
+
+    connection = psycopg2.connect(**connection_params)
+    cursor = connection.cursor()
+
+    # Fetch distinct metadata values from workspace_history
+    cursor.execute(f"SELECT DISTINCT metadata FROM genpact.workspace_history where user_id={user_id};")
+    metadata_values = [row[0] for row in cursor.fetchall()]
+
+    connection.close()
+
+    return metadata_values
 
 
 # Function to retrieve workspace history
@@ -475,9 +549,7 @@ if st.session_state.user_id !=0:
 
 
     if selected == 'Data Upload':
-        logo_url = "data:image/jpeg;base64,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" 
-
-
+        logo_url = "genpactlogo.png"
         col1, col2 = st.columns([1, 3])
         with col1:
             st.image(logo_url, width=70)
@@ -487,8 +559,7 @@ if st.session_state.user_id !=0:
 
 
         uploaded_file = st.file_uploader("Choose a pdf file", on_change=uploader_callback, type="pdf", key="file_uploader")
-
-
+        
         def browse_file():
             if uploaded_file is not None:
                 temp_pdf = tempfile.NamedTemporaryFile(delete=False)
@@ -506,21 +577,42 @@ if st.session_state.user_id !=0:
                     # vectorize_and_store_documents(uploaded_file.name)
                     policy_uploaded=True
             st.success("File Uploaded Successfully")
+        st.subheader("Select the Model")
+        models=["gpt-3","gpt-4"]
+        selected_model = st.selectbox("Select model:", models)
+        formatted_data_enabled = selected_model == "gpt-3"
+        if formatted_data_enabled:
+            st.subheader("MetaData")
+            user_id=st.session_state.user_id
+            metadata_values = get_metadata_values(user_id)
+            selected_metadata = st.selectbox("Select metadata:", metadata_values)
+
+        # formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
+        
+        # workspace_name=st.session_state.workspace_name
+        # formatted_prompt_list = []
+        # formatted_prompt_list.append(formatted_prompt)
+        # filename=uploaded_file.name
+        # inser_metadata(workspace_name,filename,user_id,formatted_prompt_list)
+            if selected_metadata:
+                st.text("Selected Metadata:")
+                st.write(selected_metadata)
+                formatted_prompt_list = [selected_metadata]
+                
+            else:
+                formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
+                formatted_prompt_list = [formatted_prompt]
+
+    # if uploaded_file is not None:
+
+    #     browse_file()
 
 
-        st.subheader("MetaData")
-        formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
+            with st.spinner("Processing..."):
+                if st.button("Execute"):
 
-# if uploaded_file is not None:
-
-#     browse_file()
-
-
-        with st.spinner("Processing..."):
-            if st.button("Execute"):
-                if formatted_prompt:
                     browse_file()
-                    result=call_attributes_api(formatted_prompt)
+                    result=call_attributes_api(selected_metadata)
                     # result_placeholder.result(result)
                     st.session_state.result=result
 
