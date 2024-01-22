@@ -16,7 +16,6 @@ pypdf
 tiktoken
 openpyxl
 pytesseract
-cv2
-keras
-tensorflow
+opencv-python
 matplotlib
+easyocr
