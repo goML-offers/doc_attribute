@@ -60,6 +60,10 @@ if "selected" not in st.session_state:
 if 'uploaded_file_name' not in st.session_state:
     st.session_state.uploaded_file_name = None
 
+if 'gpt_key' not in st.session_state:
+    st.session_state.gpt_key=""
+
+
 
 
 #Function to create a workspace
@@ -92,6 +96,7 @@ def create_workspace(id, workspace_name,user_id):
         st.warning(f'Error creating workspace: {e}')
         workspace_id = None
     finally:
+        connection.commit()
         connection.close()
 
     return workspace_created,workspace_id,user_id
@@ -167,10 +172,32 @@ def get_metadata_values(user_id):
     # Fetch distinct metadata values from workspace_history
     cursor.execute(f"SELECT DISTINCT metadata FROM genpact.workspace_history where user_id={user_id};")
     metadata_values = [row[0] for row in cursor.fetchall()]
+    connection.commit()
+    connection.close()
+    metadata_values = ['None' if val == "[\'\']" else val for val in metadata_values]
 
+    print("....",metadata_values)
+    return metadata_values
+
+def update_gptkey(user_id,gpt_key):
+    connection_params = {
+        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
+        'port': '5432',
+        'database': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres'
+    }
+
+    connection = psycopg2.connect(**connection_params)
+    cursor = connection.cursor()
+
+    # Fetch distinct metadata values from workspace_history
+    cursor.execute(f"UPDATE genpact.workspaces SET gptkey = '{gpt_key}' WHERE user_id = {user_id};")
+    
+    connection.commit()
     connection.close()
 
-    return metadata_values
+
 
 
 # Function to retrieve workspace history
@@ -193,7 +220,7 @@ def get_workspace_history(user_id):
     st.session_state.user_id = user_id
 
     print("workspace_history ",workspace_history)
-
+    connection.commit()
     connection.close()
 
     return workspace_history
@@ -273,6 +300,7 @@ def verify_password(input_password, hashed_password):
 
 
 def vectorize_and_store_documents(pdf_filename):
+    # OPENAI_API_KEY=f"{gpt_key}"
     pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
     print('Checking if index exists...')
     
@@ -307,8 +335,9 @@ def vectorize_and_store_documents(pdf_filename):
 
 
 
-def define_prompt(formatted_prompt):
-    llm_chat = ChatOpenAI(temperature=0.5, max_tokens=50, model='gpt-3.5-turbo-0613', client='')
+def define_prompt(formatted_prompt,model):
+    # OPENAI_API_KEY=f"{gpt_key}"
+    llm_chat = ChatOpenAI(temperature=0.5, max_tokens=50, model=model, client='')
     embeddings = OpenAIEmbeddings(client='')
     docsearch = Pinecone.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings)
     chain = load_qa_chain(llm_chat)
@@ -331,7 +360,7 @@ def define_prompt(formatted_prompt):
             description = lines[2].split(':')[1].strip()
             answers.append({"attribute": attribute,"value":attribute_value, "confidence": float(confidence_value),"Description":description})
         else:
-            answers.append({attribute: "N/A", "confidence": 0.0,description:"N/A"})  # Handle cases where lines are not present
+            answers.append({attribute: "N/A", "confidence": 0.0,'description':"N/A"})  # Handle cases where lines are not present
         # answers.append({"attribute":attribute})
     
     print(answers)
@@ -350,9 +379,9 @@ def upload_policy(pdf_file):
         st.error(f"Error in policy upload request: {policy_error}")
         return False
 
-def call_attributes_api(formatted_prompt):
+def call_attributes_api(formatted_prompt,selected_model):
     try:
-        answers = define_prompt(formatted_prompt)
+        answers = define_prompt(formatted_prompt,selected_model)
         return answers
 
     except requests.exceptions.RequestException as attribute_error:
@@ -384,10 +413,6 @@ def extract_text_from_pdf(pdf_path):
         for page in pdf.pages:
             text += page.extract_text()
     return text
-
-
-
-
 
 
 
@@ -472,7 +497,11 @@ if st.session_state.user_id !=0:
         workspace_created = st.session_state.get('workspace_created', False)
         user_id=st.session_state.user_id 
         print("User_id from Workspace section",user_id)
+        # gpt_key = st.text_input("Enter your GPT Key :")
+        # OPENAI_API_KEY=f"{gpt_key}"
 
+        # st.session_state.gpt_key=gpt_key
+        # update_gptkey(user_id,gpt_key)
         
         if st.button('Create Workspace', key='create_workspace_button'):
             try:
@@ -509,9 +538,11 @@ if st.session_state.user_id !=0:
         st.write("### Workspace History")
         
         if workspace_created:
+           
             st.info("You've created a new workspace. Workspace history selection is disabled.")
             workspace_created=True
             st.session_state.workspace_name = workspace_name
+            
 
         else:
             user_id=st.session_state.user_id
@@ -542,13 +573,18 @@ if st.session_state.user_id !=0:
                 cursor.execute(f"SELECT DISTINCT filename FROM genpact.workspace_history WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
                 available_files = [row[0] for row in cursor.fetchall()]
 
+                # cursor.execute(f"SELECT gptkey FROM genpact.workspaces WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
 
+                # gpt_key = cursor.fetchone()
+                # OPENAI_API_KEY=f"{gpt_key}"
+                # st.session_state.gpt_key=f"{gpt_key}"
                 selected_file = st.selectbox("Select File:", available_files, key='file_dropdown')       
                 # st.session_state.selected = 'Update Data'
                 st.experimental_set_query_params(selected=selected_workspace,selected_file=selected_file)
 
 
     if selected == 'Data Upload':
+        
         logo_url = "genpactlogo.png"
         col1, col2 = st.columns([1, 3])
         with col1:
@@ -557,15 +593,17 @@ if st.session_state.user_id !=0:
         with col2:
             st.title("MetaData Extraction")
 
-
+        filename="None"
         uploaded_file = st.file_uploader("Choose a pdf file", on_change=uploader_callback, type="pdf", key="file_uploader")
-        
+        if uploaded_file:
+            filename=uploaded_file.name
+        gpt_key=st.session_state.gpt_key
         def browse_file():
             if uploaded_file is not None:
                 temp_pdf = tempfile.NamedTemporaryFile(delete=False)
                 temp_pdf.write(uploaded_file.read())
                 policy_uploaded = False
-                
+
                 if not policy_uploaded:
                     # policy_uploaded = upload_policy(temp_pdf)
                     with open(temp_pdf.name, 'rb') as pdf_file:
@@ -578,41 +616,68 @@ if st.session_state.user_id !=0:
                     policy_uploaded=True
             st.success("File Uploaded Successfully")
         st.subheader("Select the Model")
-        models=["gpt-3","gpt-4"]
+        models=["gpt-3.5","gpt-4"]
         selected_model = st.selectbox("Select model:", models)
-        formatted_data_enabled = selected_model == "gpt-3"
-        if formatted_data_enabled:
+        if selected_model=='gpt-3.5':
+            selected_model="gpt-3.5-turbo-0613"
+
+
+        
+        if selected_model:
+            
             st.subheader("MetaData")
             user_id=st.session_state.user_id
             metadata_values = get_metadata_values(user_id)
+            # for val in metadata_values:
+            #     val.replace("\\","")
+            print("///////////////////",metadata_values)
+    
             selected_metadata = st.selectbox("Select metadata:", metadata_values)
-
-        # formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
+          
+            formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
         
-        # workspace_name=st.session_state.workspace_name
+            workspace_name=st.session_state.workspace_name
         # formatted_prompt_list = []
         # formatted_prompt_list.append(formatted_prompt)
-        # filename=uploaded_file.name
-        # inser_metadata(workspace_name,filename,user_id,formatted_prompt_list)
-            if selected_metadata:
+            
+            if selected_metadata and not formatted_prompt:
                 st.text("Selected Metadata:")
                 st.write(selected_metadata)
                 formatted_prompt_list = [selected_metadata]
-                
-            else:
-                formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
+                formatted_prompt2=f'{selected_metadata}'
+            elif selected_metadata and formatted_prompt:
+                st.text("Selected Metadata:")                
+                formatted_prompt_list = [selected_metadata]
+                formatted_prompt_list.append(formatted_prompt)
+                formatted_prompt2=f'{selected_metadata},{formatted_prompt}'
+                st.write(formatted_prompt2)
+                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list)
+            
+
+            elif formatted_prompt and not selected_metadata:
+                print(formatted_prompt)
+                # formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
                 formatted_prompt_list = [formatted_prompt]
+                formatted_prompt2=f'{formatted_prompt}'
+                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list)
+            
+            
+
 
     # if uploaded_file is not None:
 
     #     browse_file()
-
+            # if selected_metadata:
+            #     formatted_prompt2=f'{selected_metadata}'
+            # else:
+            #     formatted_prompt2=f'{formatted_prompt}'
 
             with st.spinner("Processing..."):
                 if st.button("Execute"):
 
                     browse_file()
-                    result=call_attributes_api(selected_metadata)
+                    # gpt_key=st.session_state.gpt_key
+                    result=call_attributes_api(formatted_prompt2,selected_model)
                     # result_placeholder.result(result)
                     st.session_state.result=result
 
@@ -645,26 +710,28 @@ if st.session_state.user_id !=0:
                     # )
 
 
-        result = st.session_state.result
-        print(result)
-        if result is not None:
-            st.markdown("### Update Attributes Data")
-            st.markdown("###")
-            unique_key = int(time.time())
-            editable_df = pd.DataFrame(result)
+            result = st.session_state.result
+            print(result)
+            if result is not None:
+                st.markdown("### Update Attributes Data")
+                st.markdown("###")
+                unique_key = int(time.time())
+                editable_df = pd.DataFrame(result)
 
-            edited_df = st.data_editor(editable_df, key=unique_key, num_rows="dynamic")
-            modified_df = st.data_editor(st.session_state.edited_df)
-            st.session_state.edited_df = modified_df
+                edited_df = st.data_editor(editable_df, key=unique_key, num_rows="dynamic")
+                modified_df = st.data_editor(st.session_state.edited_df)
+                st.session_state.edited_df = modified_df
 
-            # Create an in-memory Excel workbook
+                # Create an in-memory Excel workbook
 
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                edited_df.to_excel(writer, sheet_name="Sheet1", index=False)
+                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                    edited_df.to_excel(writer, sheet_name="Sheet1", index=False)
 
-            st.download_button(
-                label="Download Excel workbook",
-                data=buffer.getvalue(),
-                file_name="workbook.xlsx",
-                mime="application/vnd.ms-excel"
-            )
+                st.download_button(
+                    label="Download Excel workbook",
+                    data=buffer.getvalue(),
+                    file_name="workbook.xlsx",
+                    mime="application/vnd.ms-excel"
+                )
+                buffer.close()
+
