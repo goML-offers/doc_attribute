@@ -15,7 +15,6 @@ openai==0.28.1
 pypdf
 tiktoken
 mysql.connector 
-hashlib
 streamlit_authenticator
 psycopg2
 streamlit_option_menu
