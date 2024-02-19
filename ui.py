@@ -157,7 +157,8 @@ def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadat
     connection.commit()
     connection.close()
 
-def get_metadata_values(user_id):
+
+def get_metadata_names(user_id):
     connection_params = {
         'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
         'port': '5432',
@@ -178,6 +179,30 @@ def get_metadata_values(user_id):
 
     print("....",metadata_values)
     return metadata_values
+
+
+def get_metadata_values(user_id,metadata_name):
+    connection_params = {
+        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
+        'port': '5432',
+        'database': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres'
+    }
+
+    connection = psycopg2.connect(**connection_params)
+    cursor = connection.cursor()
+
+    # Fetch distinct metadata values from workspace_history
+    cursor.execute(f"SELECT DISTINCT metadata FROM genpact.workspace_history where user_id={user_id} and metadata_name='{metadata_name}';")
+    metadata_values = [row[0] for row in cursor.fetchall()]
+    connection.commit()
+    connection.close()
+    metadata_values = ['None' if val == "[\'\']" else val for val in metadata_values]
+
+    print("....",metadata_values)
+    return metadata_values
+
 
 def update_gptkey(user_id,gpt_key):
     connection_params = {
@@ -628,12 +653,12 @@ if st.session_state.user_id !=0:
             
             st.subheader("MetaData")
             user_id=st.session_state.user_id
-            metadata_values = get_metadata_values(user_id)
+            metadata_names= get_metadata_names(user_id)
             # for val in metadata_values:
             #     val.replace("\\","")
-            print("///////////////////",metadata_values)
+            print("///////////////////",metadata_names)
     
-            selected_metadata = st.selectbox("Select metadata:", metadata_values)
+            selected_metadata = st.selectbox("Select metadata:", metadata_names)
             formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
             metadata_name = st.text_input("Enter the Metadata name:")
             submit_button = st.button("Submit")
@@ -644,12 +669,15 @@ if st.session_state.user_id !=0:
             if (selected_metadata and not formatted_prompt) or submit_button:
                 st.text("Selected Metadata:")
                 st.write(selected_metadata)
- 
-                formatted_prompt_list = [selected_metadata]
-                formatted_prompt2=f'{selected_metadata}'
+                values=get_metadata_values(user_id,selected_metadata)
+                st.write(values)
+                formatted_prompt_list = [values]
+                formatted_prompt2=f'{values}'
             elif (selected_metadata and formatted_prompt) or submit_button:
-                st.text("Selected Metadata:")                
-                formatted_prompt_list = [selected_metadata]
+                st.text("Selected Metadata:")     
+                values=get_metadata_values(user_id,selected_metadata) 
+                st.write(values)          
+                formatted_prompt_list = [values]
                 formatted_prompt_list.append(formatted_prompt)
                 formatted_prompt2=f'{selected_metadata},{formatted_prompt}'
                 st.write(formatted_prompt2)
@@ -658,12 +686,14 @@ if st.session_state.user_id !=0:
 
             elif (formatted_prompt and not selected_metadata) or submit_button:
                 print(formatted_prompt)
+                
                 st.write(metadata_name)
                 st.write(formatted_prompt)
                 # formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
                 formatted_prompt_list = [formatted_prompt]
                 formatted_prompt2=f'{formatted_prompt}'
                 inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)
+                st.experimental_rerun()
 
             
 
