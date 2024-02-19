@@ -693,7 +693,7 @@ if st.session_state.user_id !=0:
                 formatted_prompt_list = [formatted_prompt]
                 formatted_prompt2=f'{formatted_prompt}'
                 inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)
-                st.experimental_rerun()
+
 
             
 
