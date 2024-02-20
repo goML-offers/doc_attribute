@@ -127,7 +127,7 @@ def create_dynamic_table(table_name, columns, data):
     connection.close()
 
 
-def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list):
+def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name):
     connection_params = {
         'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
         'port': '5432',
@@ -147,8 +147,8 @@ def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list):
     print(metadata)
     filename=filename.replace(' ','_')
 
-    query = "INSERT INTO genpact.workspace_history (workspace_name, filename, user_id, metadata) VALUES (%s, %s, %s, %s);"
-    data = (workspace_name, filename, user_id, metadata)
+    query = "INSERT INTO genpact.workspace_history (workspace_name, filename, user_id, metadata,metadata_name) VALUES (%s, %s, %s, %s,%s);"
+    data = (workspace_name, filename, user_id, metadata,metadata_name)
     
     print(query)
     cursor.execute(query, data)
@@ -157,7 +157,8 @@ def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list):
     connection.commit()
     connection.close()
 
-def get_metadata_values(user_id):
+
+def get_metadata_names(user_id):
     connection_params = {
         'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
         'port': '5432',
@@ -170,7 +171,7 @@ def get_metadata_values(user_id):
     cursor = connection.cursor()
 
     # Fetch distinct metadata values from workspace_history
-    cursor.execute(f"SELECT DISTINCT metadata FROM genpact.workspace_history where user_id={user_id};")
+    cursor.execute(f"SELECT DISTINCT metadata_name FROM genpact.workspace_history where user_id={user_id};")
     metadata_values = [row[0] for row in cursor.fetchall()]
     connection.commit()
     connection.close()
@@ -178,6 +179,30 @@ def get_metadata_values(user_id):
 
     print("....",metadata_values)
     return metadata_values
+
+
+def get_metadata_values(user_id,metadata_name):
+    connection_params = {
+        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
+        'port': '5432',
+        'database': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres'
+    }
+
+    connection = psycopg2.connect(**connection_params)
+    cursor = connection.cursor()
+
+    # Fetch distinct metadata values from workspace_history
+    cursor.execute(f"SELECT DISTINCT metadata FROM genpact.workspace_history where user_id={user_id} and metadata_name='{metadata_name}';")
+    metadata_values = [row[0] for row in cursor.fetchall()]
+    connection.commit()
+    connection.close()
+    metadata_values = ['None' if val == "[\'\']" else val for val in metadata_values]
+
+    print("....",metadata_values)
+    return metadata_values
+
 
 def update_gptkey(user_id,gpt_key):
     connection_params = {
@@ -286,6 +311,7 @@ def fetch_user_credentials(username, password):
         if verify_password(password, hashed_password):
             return True,user_id
         else:
+            st.warning("Incorrect username or password")
             return False,user_id
 
     except Exception as e:
@@ -627,40 +653,48 @@ if st.session_state.user_id !=0:
             
             st.subheader("MetaData")
             user_id=st.session_state.user_id
-            metadata_values = get_metadata_values(user_id)
+            metadata_names= get_metadata_names(user_id)
             # for val in metadata_values:
             #     val.replace("\\","")
-            print("///////////////////",metadata_values)
+            print("///////////////////",metadata_names)
     
-            selected_metadata = st.selectbox("Select metadata:", metadata_values)
-          
+            selected_metadata = st.selectbox("Select metadata:", metadata_names)
             formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
-        
+            metadata_name = st.text_input("Enter the Metadata name:")
+            submit_button = st.button("Submit")
             workspace_name=st.session_state.workspace_name
         # formatted_prompt_list = []
         # formatted_prompt_list.append(formatted_prompt)
             
-            if selected_metadata and not formatted_prompt:
+            if (selected_metadata and not formatted_prompt) or submit_button:
                 st.text("Selected Metadata:")
                 st.write(selected_metadata)
-                formatted_prompt_list = [selected_metadata]
-                formatted_prompt2=f'{selected_metadata}'
-            elif selected_metadata and formatted_prompt:
-                st.text("Selected Metadata:")                
-                formatted_prompt_list = [selected_metadata]
+                values=get_metadata_values(user_id,selected_metadata)
+                st.write(values)
+                formatted_prompt_list = [values]
+                formatted_prompt2=f'{values}'
+            elif (selected_metadata and formatted_prompt) or submit_button:
+                st.text("Selected Metadata:")     
+                values=get_metadata_values(user_id,selected_metadata) 
+                st.write(values)          
+                formatted_prompt_list = [values]
                 formatted_prompt_list.append(formatted_prompt)
                 formatted_prompt2=f'{selected_metadata},{formatted_prompt}'
                 st.write(formatted_prompt2)
-                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list)
+                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)
             
 
-            elif formatted_prompt and not selected_metadata:
+            elif (formatted_prompt and not selected_metadata) or submit_button:
                 print(formatted_prompt)
+                
+                st.write(metadata_name)
+                st.write(formatted_prompt)
                 # formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
                 formatted_prompt_list = [formatted_prompt]
                 formatted_prompt2=f'{formatted_prompt}'
-                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list)
-            
+                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)
+
+
             
 
 
