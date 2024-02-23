@@ -157,6 +157,37 @@ def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadat
     connection.commit()
     connection.close()
 
+def update_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name):
+    connection_params = {
+        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
+        'port': '5432',
+        'database': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres'
+    }
+
+    connection = psycopg2.connect(**connection_params)
+    cursor = connection.cursor()
+
+    print("User id inside get_workspace_history",user_id)
+    # Retrieve workspace history
+    metadata_convert=str(formatted_prompt_list)
+
+    metadata = json.dumps(metadata_convert)
+    print(metadata)
+    filename=filename.replace(' ','_')
+
+    query = "UPDATE genpact.workspace_history SET metadata = %s WHERE workspace_name= %s AND user_id = %s AND metadata_name = %s;"
+
+    data = (metadata,workspace_name, user_id ,metadata_name)
+    
+    print(query)
+    cursor.execute(query, data)
+    st.session_state.user_id = user_id
+
+    connection.commit()
+    connection.close()
+
 
 def get_metadata_names(user_id):
     connection_params = {
@@ -380,13 +411,13 @@ def define_prompt(formatted_prompt,model):
         print("=============")
         
         lines = response.strip().split('\n')
-        if len(lines) >= 2:
+        if len(lines) >= 3:
             attribute_value = lines[0].split(':',1)[1].strip()
             confidence_value = lines[1].split(':')[1].strip()
-            description = lines[2].split(':')[1].strip()
+            description = lines[2].split(':', 1)[1].strip()
             answers.append({"attribute": attribute,"value":attribute_value, "confidence": float(confidence_value),"Description":description})
         else:
-            answers.append({attribute: "N/A", "confidence": 0.0,'description':"N/A"})  # Handle cases where lines are not present
+            answers.append({"attribute": "N/A", "value": "N/A","confidence": 0.0,'description':"N/A"})  # Handle cases where lines are not present
         # answers.append({"attribute":attribute})
     
     print(answers)
@@ -440,42 +471,8 @@ def extract_text_from_pdf(pdf_path):
             text += page.extract_text()
     return text
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#UI
+#****************************************************METADATA EXTRACTION UI******************************************************
 
 
 with st.sidebar:
@@ -516,18 +513,13 @@ if selected=="Login Page":
             st.error('Username/password is incorrect')
 
 if st.session_state.user_id !=0:
-    # 'Workspaces' section
+
     if selected == 'Workspaces':
         workspace_name = st.text_input("Enter Workspace Name")
-        # global_headers_input = st.text_input("Enter Global Headers (comma-separated):")
+
         workspace_created = st.session_state.get('workspace_created', False)
         user_id=st.session_state.user_id 
         print("User_id from Workspace section",user_id)
-        # gpt_key = st.text_input("Enter your GPT Key :")
-        # OPENAI_API_KEY=f"{gpt_key}"
-
-        # st.session_state.gpt_key=gpt_key
-        # update_gptkey(user_id,gpt_key)
         
         if st.button('Create Workspace', key='create_workspace_button'):
             try:
@@ -546,13 +538,6 @@ if st.session_state.user_id !=0:
                 st.session_state.workspace_name = workspace_name
                 workspace_created, workspace_id ,user_id= create_workspace(id, workspace_name,user_id)
 
-                # global_headers_input = st.text_input("Enter Global Headers (comma-separated):")
-                # print("function before call")
-                # print("workspace name ...........",workspace_name)
-                # print("global -----------",global_headers_input)
-                # # save_global_headers(workspace_name, global_headers_input)
-                # print("executed...............")
-                        
 
             except ValueError as e:
                 st.warning(str(e))
@@ -577,8 +562,8 @@ if st.session_state.user_id !=0:
             selected_workspace = st.selectbox("Select Workspace:", formatted_workspaces, key='workspace_dropdown')
 
             if selected_workspace:
+                st.session_state.workspace_name = selected_workspace
                 user_id=st.session_state.user_id
-                # selected_workspace = st.experimental_get_query_params().get('selected', [None])[0]
 
                 connection_params = {
                         'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
@@ -592,20 +577,9 @@ if st.session_state.user_id !=0:
                 
                 cursor.execute(f"SELECT filename, table_name FROM genpact.workspace_history WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
                 files_and_tables = cursor.fetchall()
-
-                # st.write(f"You selected workspace: {selected_workspace}")
-
-
                 cursor.execute(f"SELECT DISTINCT filename FROM genpact.workspace_history WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
                 available_files = [row[0] for row in cursor.fetchall()]
-
-                # cursor.execute(f"SELECT gptkey FROM genpact.workspaces WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
-
-                # gpt_key = cursor.fetchone()
-                # OPENAI_API_KEY=f"{gpt_key}"
-                # st.session_state.gpt_key=f"{gpt_key}"
                 selected_file = st.selectbox("Select File:", available_files, key='file_dropdown')       
-                # st.session_state.selected = 'Update Data'
                 st.experimental_set_query_params(selected=selected_workspace,selected_file=selected_file)
 
 
@@ -631,24 +605,22 @@ if st.session_state.user_id !=0:
                 policy_uploaded = False
 
                 if not policy_uploaded:
-                    # policy_uploaded = upload_policy(temp_pdf)
                     with open(temp_pdf.name, 'rb') as pdf_file:
                         vectorize_and_store_documents(pdf_file.name)
-
-                    #     files = {'pdf_file': (temp_pdf.name, pdf_file, 'application/pdf')}
-                    # with open(uploaded_file.name, "wb") as f:
-                    #     f.write(uploaded_file.read())
-                    # vectorize_and_store_documents(uploaded_file.name)
-                    policy_uploaded=True
             st.success("File Uploaded Successfully")
         st.subheader("Select the Model")
-        models=["gpt-3.5","gpt-4"]
-        selected_model = st.selectbox("Select model:", models)
+        models = {
+                    "gpt-3.5": True,
+                    "gpt-4": False,
+                    "claude2": False,
+                    "claude 2.1": False
+                }
+        selected_model = st.selectbox("Select model:", models.keys(), format_func=lambda x: x if models[x] else f"{x} (disabled)")
         if selected_model=='gpt-3.5':
             selected_model="gpt-3.5-turbo-0613"
 
 
-        
+        selected_metadata = None
         if selected_model:
             
             st.subheader("MetaData")
@@ -658,90 +630,76 @@ if st.session_state.user_id !=0:
             #     val.replace("\\","")
             print("///////////////////",metadata_names)
     
-            selected_metadata = st.selectbox("Select metadata:", metadata_names)
+            selected_metadata = st.selectbox("Select metadata:", [""] + metadata_names, index=0 if selected_metadata is None else metadata_names.index(selected_metadata))
             formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
             metadata_name = st.text_input("Enter the Metadata name:")
             submit_button = st.button("Submit")
             workspace_name=st.session_state.workspace_name
+            formatted_prompt2 = None 
         # formatted_prompt_list = []
         # formatted_prompt_list.append(formatted_prompt)
-            
-            if (selected_metadata and not formatted_prompt) or submit_button:
+            condition=None
+
+
+            if (formatted_prompt and metadata_name) or submit_button:
+                formatted_prompt_list = []
+                st.text("Metadata Name")          
+                st.write(metadata_name)   
+                st.text("Attributes")     
+                formatted_prompt2=f'{formatted_prompt}'
+                st.write(formatted_prompt2)
+                formatted_prompt_list.append(formatted_prompt)               
+                
+                condition=1
+            elif (selected_metadata and not formatted_prompt and not metadata_name) or (selected_metadata and not formatted_prompt and not metadata_name and submit_button):           
+                formatted_prompt_list = []
                 st.text("Selected Metadata:")
                 st.write(selected_metadata)
-                values=get_metadata_values(user_id,selected_metadata)
-                st.write(values)
-                formatted_prompt_list = [values]
-                formatted_prompt2=f'{values}'
-            elif (selected_metadata and formatted_prompt) or submit_button:
-                st.text("Selected Metadata:")     
-                values=get_metadata_values(user_id,selected_metadata) 
-                st.write(values)          
-                formatted_prompt_list = [values]
-                formatted_prompt_list.append(formatted_prompt)
-                formatted_prompt2=f'{selected_metadata},{formatted_prompt}'
-                st.write(formatted_prompt2)
-                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)
-            
+                metadata_values = get_metadata_values(user_id,selected_metadata)
+                new_value = st.text_input("Add new value:")
+                if new_value:
+                    metadata_values.append(new_value)
+                metadata_values = ','.join(metadata_values)  # Convert list to string
+                metadata_values = metadata_values.split(',')  # Split string based on comma
+                metadata_values = [value.strip() for value in metadata_values]   
 
-            elif (formatted_prompt and not selected_metadata) or submit_button:
-                print(formatted_prompt)
-                
-                st.write(metadata_name)
-                st.write(formatted_prompt)
-                # formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
-                formatted_prompt_list = [formatted_prompt]
-                formatted_prompt2=f'{formatted_prompt}'
-                inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)
-
-
-            
-
-
-    # if uploaded_file is not None:
-
-    #     browse_file()
-            # if selected_metadata:
-            #     formatted_prompt2=f'{selected_metadata}'
-            # else:
-            #     formatted_prompt2=f'{formatted_prompt}'
+             
+                values_to_edit = st.multiselect("Delete Values:", metadata_values, default=metadata_values)
+                #values=get_metadata_values(user_id,selected_metadata)  
+                # st.write(values)
+                #metadata_values = [value for value in metadata_values if value not in values_to_edit]
+                formatted_prompt_list = values_to_edit 
+                formatted_prompt2 = f'{values_to_edit}'
+                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                print("metadata_values" ,metadata_values)
+                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                print("values_to_edit",values_to_edit)
+                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                print("formatted_prompt2",formatted_prompt2)
+                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                metadata_name=selected_metadata
+                #delete_metadata_row(workspace_name, filename, user_id, metadata_name)
+                condition=2
+                           
 
             with st.spinner("Processing..."):
                 if st.button("Execute"):
 
                     browse_file()
-                    # gpt_key=st.session_state.gpt_key
+                    if condition==1:
+                        inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)   
+                    elif condition==2:
+                        st.session_state.workspace_name=workspace_name
+                        print("workspacename",workspace_name)
+                        print("filename",filename)
+                        print("user_id",user_id)
+                        print("formatted_prompt_list",formatted_prompt_list)
+                        print("metadata_name",metadata_name)
+                        update_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)    
                     result=call_attributes_api(formatted_prompt2,selected_model)
-                    # result_placeholder.result(result)
+
                     st.session_state.result=result
 
-                    # st.markdown("### Update Attributes Data")
-                    # st.markdown("###")
-                    # result=st.session_state.result
-                    # unique_key = int(time.time())
-                    # editable_df = pd.DataFrame(result)
-                    # edited_df = st.data_editor(editable_df, key=unique_key, num_rows="dynamic")
-                    # modified_df = st.data_editor(st.session_state.edited_df)
-                    # st.session_state.edited_df = modified_df
-
-        # modified_df = st.data_editor(st.session_state.edited_df)
-        # st.session_state.edited_df = modified_df
-
-
-        # with st.form("my_form"):
-        #     submitted = st.form_submit_button("Save")
-        #     if submitted:
-        #         on_download_click(st.session_state.edited_df, "output.json")
-                    
-                    # with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                    #     modified_df.to_excel(writer, sheet_name="Sheet1", index=False)
-
-                    # st.download_button(
-                    #     label="Download Excel workbook",
-                    #     data=buffer.getvalue(),
-                    #     file_name="workbook.xlsx",
-                    #     mime="application/vnd.ms-excel"
-                    # )
 
 
             result = st.session_state.result
