@@ -227,11 +227,14 @@ def get_metadata_values(user_id,metadata_name):
     # Fetch distinct metadata values from workspace_history
     cursor.execute(f"SELECT DISTINCT metadata FROM genpact.workspace_history where user_id={user_id} and metadata_name='{metadata_name}';")
     metadata_values = [row[0] for row in cursor.fetchall()]
+ 
+
     connection.commit()
     connection.close()
-    metadata_values = ['None' if val == "[\'\']" else val for val in metadata_values]
+    metadata_values = [val.replace("\\", "").replace("'", "").replace("[", "").replace("]", "").replace("\"", "").strip() for val in metadata_values if val]
+    #metadata_values = ['None' if val == "[\'\']" else val for val in metadata_values]
 
-    print("....",metadata_values)
+    print(".......get metadata values function output",metadata_values)
     return metadata_values
 
 
@@ -634,12 +637,18 @@ if st.session_state.user_id !=0:
             formatted_prompt = st.text_area("Enter the attributes you want to extract from the document (comma-separated attributes):")
             metadata_name = st.text_input("Enter the Metadata name:")
             submit_button = st.button("Submit")
+
+            
             workspace_name=st.session_state.workspace_name
             formatted_prompt2 = None 
         # formatted_prompt_list = []
         # formatted_prompt_list.append(formatted_prompt)
             condition=None
-
+            if selected_metadata:
+                metadata_values = get_metadata_values(user_id,selected_metadata)
+                print("metadata vlues fetched")
+                print(metadata_values)
+            
 
             if (formatted_prompt and metadata_name) or submit_button:
                 formatted_prompt_list = []
@@ -648,38 +657,42 @@ if st.session_state.user_id !=0:
                 st.text("Attributes")     
                 formatted_prompt2=f'{formatted_prompt}'
                 st.write(formatted_prompt2)
-                formatted_prompt_list.append(formatted_prompt)               
-                
+                formatted_prompt_list.append(formatted_prompt)
                 condition=1
             elif (selected_metadata and not formatted_prompt and not metadata_name) or (selected_metadata and not formatted_prompt and not metadata_name and submit_button):           
                 formatted_prompt_list = []
                 st.text("Selected Metadata:")
                 st.write(selected_metadata)
-                metadata_values = get_metadata_values(user_id,selected_metadata)
+                metadata_values=metadata_values
                 new_value = st.text_input("Add new value:")
                 if new_value:
                     metadata_values.append(new_value)
-                metadata_values = ','.join(metadata_values)  # Convert list to string
+
+                metadata_values = ','.join(metadata_values)
+                #metadata_values = list(set(metadata_values))
                 metadata_values = metadata_values.split(',')  # Split string based on comma
+
                 metadata_values = [value.strip() for value in metadata_values]   
 
-             
                 values_to_edit = st.multiselect("Delete Values:", metadata_values, default=metadata_values)
-                #values=get_metadata_values(user_id,selected_metadata)  
-                # st.write(values)
-                #metadata_values = [value for value in metadata_values if value not in values_to_edit]
+
                 formatted_prompt_list = values_to_edit 
+                print("check1")
+                print(formatted_prompt_list)
+                print("check2") 
+                print(values_to_edit)
+                metadata_values= formatted_prompt_list
+                print("check3")
+                print(metadata_values)
+
                 formatted_prompt2 = f'{values_to_edit}'
-                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-                print("metadata_values" ,metadata_values)
-                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-                print("values_to_edit",values_to_edit)
-                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-                print("formatted_prompt2",formatted_prompt2)
-                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+
+
                 metadata_name=selected_metadata
-                #delete_metadata_row(workspace_name, filename, user_id, metadata_name)
                 condition=2
+
+             
+
                            
 
             with st.spinner("Processing..."):
@@ -687,7 +700,7 @@ if st.session_state.user_id !=0:
 
                     browse_file()
                     if condition==1:
-                        inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)   
+                        inser_metadata(workspace_name,filename,user_id,formatted_prompt2,metadata_name)   
                     elif condition==2:
                         st.session_state.workspace_name=workspace_name
                         print("workspacename",workspace_name)
@@ -695,7 +708,7 @@ if st.session_state.user_id !=0:
                         print("user_id",user_id)
                         print("formatted_prompt_list",formatted_prompt_list)
                         print("metadata_name",metadata_name)
-                        update_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name)    
+                        update_metadata(workspace_name,filename,user_id,formatted_prompt2,metadata_name)    
                     result=call_attributes_api(formatted_prompt2,selected_model)
 
                     st.session_state.result=result
