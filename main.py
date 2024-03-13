@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageColor
 import io
 import ast
 import numpy as np
-api_key = "api key"
+api_key = "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"
 
 client = OpenAI(api_key=api_key)
 
@@ -99,6 +99,7 @@ description: (Describe the damage here)(Description has to be minimum 35 words)
 damage cv array:
 (only the array value without any format, and no explaination)
 License number: (License number from the number plate of the car)(only if number plate in car exists)
+
 Chelsea number: (Its a 17 digit alphanumrical number comes in sticker)
 
 Note:
