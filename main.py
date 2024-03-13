@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageColor
 import io
 import ast
 import numpy as np
-api_key = "api key"
+api_key = "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"
 
 client = OpenAI(api_key=api_key)
 
@@ -96,10 +96,9 @@ output format:
 image {i + 1}:  
 description: (Identify the plate number of the car if any , Describe the damage here and the base price value after reduction)(Description has to be minimum 35 words,use same font style and size)
 damage cv array:
-(only the pixel array value without any format, and no explaination)
+(only the pixel array value without this format([(width//4, height//4), (width*3//4, height*3//4)]), and no explaination)
 License number: (License number from the number plate of the car)(only if number plate in car exists)
 
-Chelsea number: (Its a 17 digit alphanumrical number comes in sticker)
 
 Note:
 if no damage found return a empty array, the array should exactly match the image when i subtitue the array in my function
