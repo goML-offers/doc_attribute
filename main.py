@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageColor
 import io
 import ast
 import numpy as np
-api_key = "your api key"
+api_key = "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"
 
 client = OpenAI(api_key=api_key)
 
@@ -75,15 +75,21 @@ if st.button("Submit"):
         for  i, uploaded_file in enumerate(uploaded_files):
             image = Image.open(uploaded_file)
             base64_image = encode_image(image)
-            prompt = f"""you are give with {len(uploaded_files)} images of the cars image. You need to classify each car with a percentage of the damage u find in them, create a array and store the the damages i need to hightlight the the particular area in the image 
+            prompt = f"""you are give with {len(uploaded_files)} images of the cars image.By considering Base price: $20000
+Scratch: Reduce valuation by 1%
+Paint issues: Reduced by 1%
+Tires damage: 0.5%
+Tire grip damage: 0.5%
+Dent: 1%
+You need to tell each car exact base price after certain percentage of reduction based on damage by assuming base price as $20000 , create a array and store the the damages i need to hightlight the the particular area in the image 
 i am using this open cv to highlight
 draw.rectangle([(width//4, height//4), (width*3//4, height*3//4)], outline="red", width=2)
 
 so give me the array of the damaged area so i can subittute over there in the below format (use exact values,no variable names with this format (width//4, height//4), (width*3//4, height*3//4))
 in the below format 
 output format:
-image {i + 1}:
-description: (Describe the damage here)(Description has to be minimum 35 words)
+image {i + 1}:  
+description: (Identify the plate number of the car if any , Describe the damage here and the base price value after reduction)(Description has to be minimum 35 words,use same font style and size)
 damage cv array:
 (only the array value without any format, and no explaination)
 
@@ -139,7 +145,7 @@ damage cv array:
 
                     else:
                         st.image(image)
-                        st.write(f"No damage found in {file_names[i]}")
+                        st.write(f"Description: {descriptions_list[i]}")
                         file_names.pop(0)
             # else:
             #     st.write("No damage found in the uploaded images.")
