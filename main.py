@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageColor
 import io
 import ast
 import numpy as np
-api_key = "your api key"
+api_key = "api key"
 
 client = OpenAI(api_key=api_key)
 
@@ -19,6 +19,8 @@ def get_damages(content:str):
   for item in descriptions_and_arrays:
       if "damage cv array:" in item:
           array_string = item.split("damage cv array:")[1].strip()
+          array_string_parts=array_string.split("License number:",1)
+          array_string=array_string_parts[0].strip()
           damage_cv_arrays.append(ast.literal_eval(array_string))
   return damage_cv_arrays
 
@@ -35,7 +37,16 @@ def get_description(content:str):
 
   print(descriptions)
   return descriptions
+def get_license_number(content:str):
+    license_numbers = []
+    descriptions_and_arrays = content.split("\n\n")
+    for item in descriptions_and_arrays:
+        if "License number:" in item:
+            license_number = item.split("License number:")[1].strip()
 
+            license_numbers.append(str(license_number))
+    print(license_numbers)
+    return license_numbers
 #function to encode the image
 
 def encode_image(image):
@@ -83,29 +94,35 @@ so give me the array of the damaged area so i can subittute over there in the be
 in the below format 
 output format:
 image {i + 1}:
+
 description: (Describe the damage here)(Description has to be minimum 35 words)
 damage cv array:
 (only the array value without any format, and no explaination)
-
+License number: (License number from the number plate of the car)(only if number plate in car exists)
+Chelsea number: (Its a 17 digit alphanumrical number comes in sticker)
 
 Note:
 if no damage found return a empty array, the array should exactly match the image when i subtitue the array in my function
 
 Reference format: 
+
 image 1:
 description: (Describe the damage here)
 damage cv array:
 [(0, 0), (736, 150)]
+License number: (License number from the number plate of the car)(only if number plate in car exists)
 
 image 2:
 description: (Describe the damage here)
 damage cv array:
 []
+License number: (License number from the number plate of the car)(only if number plate in car exists)
 
 image 3:
 description: (Describe the damage here)
 damage cv array:
 [(0, 0), (474, 238)]
+License number: (License number from the number plate of the car)(only if number plate in car exists)
 """
             response = client.chat.completions.create(
                 model="gpt-4-vision-preview",
@@ -130,16 +147,22 @@ damage cv array:
             descriptions_list = get_description(completion)
             print("Description_lis",descriptions_list)
             print("damage_list",damage_list)
+            license_number_list = get_license_number(completion)
+            print("license_number_list",license_number_list)
+
             if len(damage_list) > 0:
                 for i, damage_array in enumerate(damage_list):
                     if len(damage_array) > 0:
                         image = highlight_defect(image, damage_list[i])
                         st.image(image)
+                        st.write(f"Image: {file_names[i]}")
+                        st.write(f"License number: {license_number_list[i]}")
                         st.write(f"Description: {descriptions_list[i]}")
 
                     else:
                         st.image(image)
                         st.write(f"No damage found in {file_names[i]}")
+                        st.write(f"License number: {license_number_list[i]}")
                         file_names.pop(0)
             # else:
             #     st.write("No damage found in the uploaded images.")
