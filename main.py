@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageColor
 import io
 import ast
 import numpy as np
-api_key = "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"
+api_key = "api key"
 
 client = OpenAI(api_key=api_key)
 
