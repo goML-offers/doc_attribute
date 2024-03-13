@@ -1,120 +1,145 @@
-from fastapi import FastAPI, File, UploadFile
-from typing import List
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from langchain.document_loaders import PyPDFLoader
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Pinecone
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chat_models import ChatOpenAI
-from langchain.chains.question_answering import load_qa_chain
-import os
-import pandas as pd
-from dotenv import load_dotenv
-import pinecone
-import time
+import streamlit as st
+from openai import OpenAI
+import base64
+from PIL import Image, ImageDraw, ImageColor
+import io
+import ast
+import numpy as np
+api_key = "your api key"
+
+client = OpenAI(api_key=api_key)
 
 
-app = FastAPI()
+#function to get the damages value form the gpt output
+def get_damages(content:str):
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "OPTIONS", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
-)
+  descriptions_and_arrays = content.split("\n\n")
 
-load_dotenv()
+  damage_cv_arrays = []
+  for item in descriptions_and_arrays:
+      if "damage cv array:" in item:
+          array_string = item.split("damage cv array:")[1].strip()
+          damage_cv_arrays.append(ast.literal_eval(array_string))
+  return damage_cv_arrays
 
-PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME')  # 'kn1'
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
-PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
+def get_description(content:str):
+  descriptions_and_arrays = content.split("\n\n")
+  descriptions = []
+  for item in descriptions_and_arrays:
+      if "description:" in item:
+            description = item.split("description:")[1].strip()
+            # Remove "damage cv array:" and the subsequent sentence if present in the description
+            description_parts = description.split("damage cv array:", 1)
+            description = description_parts[0].strip()
+            descriptions.append(description)
 
-class AttributeInput(BaseModel):
-    formatted_prompt: str
+  print(descriptions)
+  return descriptions
 
-def vectorize_and_store_documents(pdf_filename):
-    pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
-    print('Checking if index exists...')
-    
+#function to encode the image
 
-    if PINECONE_INDEX_NAME in pinecone.list_indexes():
-        print("deleting the existing index")
-        pinecone.delete_index(PINECONE_INDEX_NAME)
-        print("deleted")
-
-    time.sleep(20)
-
-    if PINECONE_INDEX_NAME not in pinecone.list_indexes(): 
-        print('Index does not exist, creating index...')
-        # we create a new index
-        pinecone.create_index(name=PINECONE_INDEX_NAME,metric='cosine',dimension=1536)
-        #pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
-
-    # Load PDF documents
-    loader = PyPDFLoader(pdf_filename)
-    pages = loader.load()
-    # Chunk data into smaller documents
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=100)
-    texts = text_splitter.split_documents(pages)
-    print(texts)
-
-     # Vectorize documents using OpenAI embeddings
-    embeddings = OpenAIEmbeddings(client='')
-    docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=PINECONE_INDEX_NAME)
-    print(docsearch)
-    time.sleep(20)
+def encode_image(image):
+    img_buffer = io.BytesIO()
+    image.save(img_buffer, format="JPEG")
+    img_str = base64.b64encode(img_buffer.getvalue()).decode()
+    return img_str
+  
+def highlight_defect(image, defect_array):
+    draw = ImageDraw.Draw(image)
+    red_color = (255, 0, 0, 50) 
+    draw.rectangle(defect_array, outline=red_color, width=7)
+    return image
 
 
+   
+# &&&&&&&&&&&&&&&&&&&&&&&&&Streamlit UI code&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+st.title("Inride Usecase")
 
-def define_prompt(formatted_prompt):
-    llm_chat = ChatOpenAI(temperature=0.5, max_tokens=50, model='gpt-3.5-turbo-0613', client='')
-    embeddings = OpenAIEmbeddings(client='')
-    docsearch = Pinecone.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings)
-    chain = load_qa_chain(llm_chat)
-    answers = []
-    attributes=[attr.strip() for attr in formatted_prompt.split(",")]
+# Upload file button
+uploaded_files = st.file_uploader("Upload multiple JPEG or JPG files", accept_multiple_files=True)
+file_names = []  # List to store the filenames
+
+base64_images = []
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        image = Image.open(uploaded_file)
+        base64_images.append(encode_image(image))
+        file_names.append(uploaded_file.name)  # Store the filename
+    print("meowwwwwww")
+    print(file_names)
+    print("meowwwwwww")
+    # file_names.reverse()
+
+if st.button("Submit"):
+    if uploaded_files:
+        for  i, uploaded_file in enumerate(uploaded_files):
+            image = Image.open(uploaded_file)
+            base64_image = encode_image(image)
+            prompt = f"""you are give with {len(uploaded_files)} images of the cars image. You need to classify each car with a percentage of the damage u find in them, create a array and store the the damages i need to hightlight the the particular area in the image 
+i am using this open cv to highlight
+draw.rectangle([(width//4, height//4), (width*3//4, height*3//4)], outline="red", width=2)
+
+so give me the array of the damaged area so i can subittute over there in the below format (use exact values,no variable names with this format (width//4, height//4), (width*3//4, height*3//4))
+in the below format 
+output format:
+image {i + 1}:
+description: (Describe the damage here)(Description has to be minimum 35 words)
+damage cv array:
+(only the array value without any format, and no explaination)
 
 
-    for attribute in attributes:
-        question=f"Provide me the {attribute}. Do not add extra wordings.Check it iteratively and respond precisely. Add the confidence scale from scale 0 to 1.Provide me in two line For example: policy period :'20 Apr 23 00:00 hrs to 19 Apr 25 23:59 hrs'. \n Confidence level: '0.9'"
-        search = docsearch.similarity_search(attribute)
-        response = chain.run(input_documents=search, question=question)
-        print("============")
-        print(response)
-        print("=============")
-        
-        lines = response.strip().split('\n')
-        if len(lines) >= 2:
-            attribute_value = lines[0].split(':',1)[1].strip()
-            confidence_value = lines[1].split(':')[1].strip()
-            answers.append({"attribute": attribute,"value":attribute_value, "confidence": float(confidence_value)})
-        else:
-            answers.append({attribute: "N/A", "confidence": 0.0})  # Handle cases where lines are not present
-        # answers.append({"attribute":attribute})
-    
-    print(answers)
-    return answers
+Note:
+if no damage found return a empty array, the array should exactly match the image when i subtitue the array in my function
 
-@app.post("/upload-policy/")
-async def upload_policy(pdf_file: UploadFile = File(...)):
-    with open(pdf_file.filename, "wb") as f:
-        f.write(pdf_file.file.read())
-    
-    vectorize_and_store_documents(pdf_file.filename)
-    os.remove(pdf_file.filename)
+Reference format: 
+image 1:
+description: (Describe the damage here)
+damage cv array:
+[(0, 0), (736, 150)]
 
-@app.post("/attributes/")
-async def attributes(input_data: AttributeInput):
-    formatted_prompt = input_data.formatted_prompt
-    answers = define_prompt(formatted_prompt)
-    return answers
+image 2:
+description: (Describe the damage here)
+damage cv array:
+[]
 
-    # return {"message": "Answers extracted, Pinecone index deleted, and appended to Excel.", "file_name": excel_filename}
-# Run the FastAPI app
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+image 3:
+description: (Describe the damage here)
+damage cv array:
+[(0, 0), (474, 238)]
+"""
+            response = client.chat.completions.create(
+                model="gpt-4-vision-preview",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                             {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=300,
+            )
+            completion = response.choices[0].message.content
+           
+            print("Completion:", completion)
+            damage_list = get_damages(completion)
+            descriptions_list = get_description(completion)
+            print("Description_lis",descriptions_list)
+            print("damage_list",damage_list)
+            if len(damage_list) > 0:
+                for i, damage_array in enumerate(damage_list):
+                    if len(damage_array) > 0:
+                        image = highlight_defect(image, damage_list[i])
+                        st.image(image)
+                        st.write(f"Description: {descriptions_list[i]}")
+
+                    else:
+                        st.image(image)
+                        st.write(f"No damage found in {file_names[i]}")
+                        file_names.pop(0)
+            # else:
+            #     st.write("No damage found in the uploaded images.")
