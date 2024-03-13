@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageColor
 import io
 import ast
 import numpy as np
-api_key = "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"
+api_key = "api key"
 
 client = OpenAI(api_key=api_key)
 
@@ -86,18 +86,17 @@ if st.button("Submit"):
         for  i, uploaded_file in enumerate(uploaded_files):
             image = Image.open(uploaded_file)
             base64_image = encode_image(image)
-            prompt = f"""you are give with {len(uploaded_files)} images of the cars image. You need to classify each car with a percentage of the damage u find in them, create a array and store the the damages i need to hightlight the the particular area in the image 
-i am using this open cv to highlight
+            prompt = f"""you are give with {len(uploaded_files)} images of the cars image. create a array and store the the damages i need to hightlight the the particular area in the image.
+And 
+I am using this open cv to highlight
 draw.rectangle([(width//4, height//4), (width*3//4, height*3//4)], outline="red", width=2)
-
-so give me the array of the damaged area so i can subittute over there in the below format (use exact values,no variable names with this format (width//4, height//4), (width*3//4, height*3//4))
+So give me the pixel array of the damaged area in the above format so i can subittute over there in the below format (use exact values,no variable names with this format (width//4, height//4), (width*3//4, height*3//4))
 in the below format 
 output format:
-image {i + 1}:
-
-description: (Describe the damage here)(Description has to be minimum 35 words)
+image {i + 1}:  
+description: (Identify the plate number of the car if any , Describe the damage here and the base price value after reduction)(Description has to be minimum 35 words,use same font style and size)
 damage cv array:
-(only the array value without any format, and no explaination)
+(only the pixel array value without any format, and no explaination)
 License number: (License number from the number plate of the car)(only if number plate in car exists)
 
 Chelsea number: (Its a 17 digit alphanumrical number comes in sticker)
@@ -159,11 +158,35 @@ License number: (License number from the number plate of the car)(only if number
                         st.write(f"Image: {file_names[i]}")
                         st.write(f"License number: {license_number_list[i]}")
                         st.write(f"Description: {descriptions_list[i]}")
-
                     else:
                         st.image(image)
-                        st.write(f"No damage found in {file_names[i]}")
-                        st.write(f"License number: {license_number_list[i]}")
+                        st.write(f"Description: {descriptions_list[i]}")
+
                         file_names.pop(0)
-            # else:
-            #     st.write("No damage found in the uploaded images.")
+
+            prompt1=f"""By considering Base price: $20000
+            Scratch: Reduce valuation by 1%
+            Paint issues: Reduced by 1%
+            Tires damage: 0.5%
+            Tire grip damage: 0.5%
+            Dent: 1%
+            You need to tell each car exact base price after certain percentage of reduction based on damage by assuming base price as $20000 
+            Below is the description of the all the  car images, Bsed on the belwo description comeup with the valuation based on base price which is $20,000:
+            Description list :{descriptions_list}
+            """
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                                {"type": "text", "text": prompt1},
+
+                        ],
+                    }
+                ],
+                max_tokens=300,
+            )
+            completion1 = response.choices[0].message.content
+            print(completion1)
+            st.write(completion1)
