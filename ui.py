@@ -66,21 +66,42 @@ if 'gpt_key' not in st.session_state:
 
 
 
+
+#to COnnect the DataBase
+def connect_to_database():
+    connection_params = {
+        'host': os.getenv('DB_HOST'),
+        'port': os.getenv('DB_PORT'),
+        'database': os.getenv('DB_NAME'),
+        'user': os.getenv('DB_USERNAME'),
+        'password': os.getenv('DB_PASSWORD')
+    }
+    connection = psycopg2.connect(**connection_params)
+    return connection
+
+
+
 #Function to create a workspace
 def create_workspace(id, workspace_name,user_id):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
-
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
     workspace_created = False
     try:
-        cursor.execute("INSERT INTO genpact.workspaces (id, workspace_name,user_id) VALUES (%s, %s,%s) RETURNING id;", (id, workspace_name,user_id))
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'workspaces');")
+        table_exists = cursor.fetchone()[0]
+
+        if not table_exists:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS metadata.workspaces(
+                        id integer,
+                        workspace_name character varying,
+                        table_name character varying ,
+                        filename character varying ,
+                        user_id integer,
+                        metadata character varying ,
+                        gptkey character varying 
+)""")
+
+        cursor.execute("INSERT INTO metadata.workspaces (id, workspace_name,user_id) VALUES (%s, %s,%s) RETURNING id;", (id, workspace_name,user_id))
         workspace_id = cursor.fetchone()[0]
         connection.commit()
         st.success(f'Workspace "{workspace_name}" created successfully .')
@@ -102,24 +123,17 @@ def create_workspace(id, workspace_name,user_id):
     return workspace_created,workspace_id,user_id
 
 def create_dynamic_table(table_name, columns, data):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
 
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
     columns_lower = [col.lower().replace(' ', '_') for col in columns]
     column_definitions = ", ".join([f'"{col}" VARCHAR' for col in columns_lower])
     
-    create_table_query = f"CREATE TABLE IF NOT EXISTS genpact.{table_name} ({column_definitions});"
+    create_table_query = f"CREATE TABLE IF NOT EXISTS metadata.{table_name} ({column_definitions});"
     # create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(column_definitions)});"
     cursor.execute(create_table_query)
     values = "', '".join(str(row[col]) for col in columns_lower if col in row.index)
-    insert_query = f"INSERT INTO genpact.{table_name} ({', '.join(columns_lower)}) VALUES ('{values}');"
+    insert_query = f"INSERT INTO metadata.{table_name} ({', '.join(columns_lower)}) VALUES ('{values}');"
     print(insert_query)
     cursor.execute(insert_query)
 
@@ -128,15 +142,8 @@ def create_dynamic_table(table_name, columns, data):
 
 
 def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
 
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
 
     print("User id inside get_workspace_history",user_id)
@@ -147,26 +154,39 @@ def inser_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadat
     print(metadata)
     filename=filename.replace(' ','_')
 
-    query = "INSERT INTO genpact.workspace_history (workspace_name, filename, user_id, metadata,metadata_name) VALUES (%s, %s, %s, %s,%s);"
-    data = (workspace_name, filename, user_id, metadata,metadata_name)
-    
-    print(query)
-    cursor.execute(query, data)
-    st.session_state.user_id = user_id
+    try:
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'workspaces');")
+        table_exists = cursor.fetchone()[0]
+        if not table_exists:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS metadata.workspace_history
+(
+    id integer,
+    workspace_name character varying COLLATE pg_catalog."default",
+    table_name character varying COLLATE pg_catalog."default",
+    filename character varying COLLATE pg_catalog."default",
+    user_id integer,
+    metadata character varying COLLATE pg_catalog."default",
+    metadata_name character varying COLLATE pg_catalog."default"
+)""")
 
-    connection.commit()
-    connection.close()
+    
+
+        query = "INSERT INTO metadata.workspace_history (workspace_name, filename, user_id, metadata,metadata_name) VALUES (%s, %s, %s, %s,%s);"
+        data = (workspace_name, filename, user_id, metadata,metadata_name)
+        
+        print(query)
+        cursor.execute(query, data)
+        st.session_state.user_id = user_id
+
+        connection.commit()
+        connection.close()
+    except Exception as e:
+        connection.rollback()
+        st.warning(f'Error creating workspace: {e}')
+        workspace_id = None
 
 def update_metadata(workspace_name,filename,user_id,formatted_prompt_list,metadata_name):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
-
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
 
     print("User id inside get_workspace_history",user_id)
@@ -177,7 +197,7 @@ def update_metadata(workspace_name,filename,user_id,formatted_prompt_list,metada
     print(metadata)
     filename=filename.replace(' ','_')
 
-    query = "UPDATE genpact.workspace_history SET metadata = %s WHERE workspace_name= %s AND user_id = %s AND metadata_name = %s;"
+    query = "UPDATE metadata.workspace_history SET metadata = %s WHERE workspace_name= %s AND user_id = %s AND metadata_name = %s;"
 
     data = (metadata,workspace_name, user_id ,metadata_name)
     
@@ -190,19 +210,12 @@ def update_metadata(workspace_name,filename,user_id,formatted_prompt_list,metada
 
 
 def get_metadata_names(user_id):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
 
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
 
     # Fetch distinct metadata values from workspace_history
-    cursor.execute(f"SELECT DISTINCT metadata_name FROM genpact.workspace_history where user_id={user_id};")
+    cursor.execute(f"SELECT DISTINCT metadata_name FROM metadata.workspace_history where user_id={user_id};")
     metadata_values = [row[0] for row in cursor.fetchall()]
     connection.commit()
     connection.close()
@@ -213,19 +226,11 @@ def get_metadata_names(user_id):
 
 
 def get_metadata_values(user_id,metadata_name):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
-
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
 
     # Fetch distinct metadata values from workspace_history
-    cursor.execute(f"SELECT DISTINCT metadata FROM genpact.workspace_history where user_id={user_id} and metadata_name='{metadata_name}';")
+    cursor.execute(f"SELECT DISTINCT metadata FROM metadata.workspace_history where user_id={user_id} and metadata_name='{metadata_name}';")
     metadata_values = [row[0] for row in cursor.fetchall()]
  
 
@@ -239,19 +244,12 @@ def get_metadata_values(user_id,metadata_name):
 
 
 def update_gptkey(user_id,gpt_key):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
 
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
 
     # Fetch distinct metadata values from workspace_history
-    cursor.execute(f"UPDATE genpact.workspaces SET gptkey = '{gpt_key}' WHERE user_id = {user_id};")
+    cursor.execute(f"UPDATE metadata.workspaces SET gptkey = '{gpt_key}' WHERE user_id = {user_id};")
     
     connection.commit()
     connection.close()
@@ -261,20 +259,13 @@ def update_gptkey(user_id,gpt_key):
 
 # Function to retrieve workspace history
 def get_workspace_history(user_id):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
 
-    connection = psycopg2.connect(**connection_params)
+    connection = connect_to_database()
     cursor = connection.cursor()
 
     print("User id inside get_workspace_history",user_id)
     # Retrieve workspace history
-    cursor.execute(f"SELECT DISTINCT workspace_name FROM genpact.workspace_history WHERE user_id={user_id};")
+    cursor.execute(f"SELECT DISTINCT workspace_name FROM metadata.workspace_history WHERE user_id={user_id};")
     workspace_history = cursor.fetchall()
     st.session_state.user_id = user_id
 
@@ -287,22 +278,25 @@ def get_workspace_history(user_id):
 
 
 def insert_user_credentials(username, password):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
-
+    connection = connect_to_database()
+    cursor = connection.cursor()
     try:
-        connection = psycopg2.connect(**connection_params)
-        cursor = connection.cursor()
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'workspaces');")
+        table_exists = cursor.fetchone()[0]
+        if not table_exists:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS metadata.users
+            (
+                user_id integer,
+                username character varying COLLATE pg_catalog."default",
+                password character varying COLLATE pg_catalog."default"
+            )""")
+        
+        
 
 
         hashed_password = hash_password(password)
 
-        cursor.execute("INSERT INTO genpact.users (username, password) VALUES (%s, %s);", (username, hashed_password))
+        cursor.execute("INSERT INTO metadata.users (username, password) VALUES (%s, %s);", (username, hashed_password))
 
         connection.commit()
         cursor.close()
@@ -319,20 +313,14 @@ def hash_password(password):
     return hashed_password
 
 def fetch_user_credentials(username, password):
-    connection_params = {
-        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-        'port': '5432',
-        'database': 'postgres',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
+
 
     try:
-        connection = psycopg2.connect(**connection_params)
+        connection = connect_to_database()
         cursor = connection.cursor()
 
         # Fetch hashed password from the 'users' table for the provided username
-        cursor.execute("SELECT user_id,password FROM genpact.users WHERE username = %s;", (username,))
+        cursor.execute("SELECT user_id,password FROM metadata.users WHERE username = %s;", (username,))
         user_data = cursor.fetchone()
         
         print("userdata",user_data)
@@ -526,16 +514,10 @@ if st.session_state.user_id !=0:
         
         if st.button('Create Workspace', key='create_workspace_button'):
             try:
-                connection_params = {
-                    'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-                    'port': '5432',
-                    'database': 'postgres',
-                    'user': 'postgres',
-                    'password': 'postgres'
-                }
-                connection = psycopg2.connect(**connection_params)
+
+                connection = connect_to_database()
                 cursor = connection.cursor()
-                cursor.execute("SELECT MAX(id) FROM genpact.workspaces;")
+                cursor.execute("SELECT MAX(id) FROM metadata.workspaces;")
                 latest_user_id = cursor.fetchone()[0]
                 id = 1 if latest_user_id is None else latest_user_id + 1
                 st.session_state.workspace_name = workspace_name
@@ -568,19 +550,12 @@ if st.session_state.user_id !=0:
                 st.session_state.workspace_name = selected_workspace
                 user_id=st.session_state.user_id
 
-                connection_params = {
-                        'host': 'database-1.cmeaoe1g4zcd.ap-south-1.rds.amazonaws.com',
-                        'port': '5432',
-                        'database': 'postgres',
-                        'user': 'postgres',
-                        'password': 'postgres'
-                    }
-                connection = psycopg2.connect(**connection_params)
+                connection = connect_to_database()
                 cursor = connection.cursor()
                 
-                cursor.execute(f"SELECT filename, table_name FROM genpact.workspace_history WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
+                cursor.execute(f"SELECT filename, table_name FROM metadata.workspace_history WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
                 files_and_tables = cursor.fetchall()
-                cursor.execute(f"SELECT DISTINCT filename FROM genpact.workspace_history WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
+                cursor.execute(f"SELECT DISTINCT filename FROM metadata.workspace_history WHERE user_id={user_id} AND workspace_name='{selected_workspace}';")
                 available_files = [row[0] for row in cursor.fetchall()]
                 selected_file = st.selectbox("Select File:", available_files, key='file_dropdown')       
                 st.experimental_set_query_params(selected=selected_workspace,selected_file=selected_file)
