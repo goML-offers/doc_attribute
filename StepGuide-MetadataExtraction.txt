@@ -1,0 +1,39 @@
+Steps:
+1. Create a an EC2 instance with t2large config.
+
+2. Configure the security group of the EC2 instance:
+	2.1. Select the instance which you have created and go to Security section.
+	2.2. Click on Security Groups value which is alreay there.
+	2.3. Go to inbound rules section and click on Edit inbound rules.
+	2.4. Select Type to "Custom TCP", Port range to "8501" and Source to "Anywhere-IPv4"
+	2.5. Repeat the step 11.4 and select Source to "Anywhere-IPv6"
+	2.6. Click on Save Rules on bottom right side.
+
+3. Install docker using command:
+	"sudo yum install docker"
+	
+4. Start the docker dameon using command: 
+	"sudo systemctl start docker"
+	
+5. Install git using the command:
+	"sudo yum install git"
+
+6. Create a AWS postgres db instance for storage of data. 
+	create a schema named "genpact"
+	Create table "users" with columns (username, password)
+	Create table "workspace_history" with columns (id, workspace_name, table name, filename, user_id, metadata)
+	Create table "workspaces" with columns (id, workspace_name, table name, filename, user_id, metadata, gptkey)
+	
+7. GIT clone the code into any folder and get into the cloned repo and set it as working directory.
+
+8. Build the docker image:
+	sudo docker build --platform=linux/amd64 -t <image-name> .
+
+9. Run the docker container:
+	sudo docker run -it -p 80:8501 --env-file </path/to/.env> <image-name>
+	
+10. Copy the External IP shown on in the terminal and paste it any browser to use the UI.
+	
+
+	
+	
